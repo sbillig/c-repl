@@ -17,11 +17,10 @@ module Child (
 
 import Prelude hiding (catch)
 import Control.Concurrent
-import Control.Exception
+import Control.OldException
 import Control.Monad.Error
 import Data.Maybe
 import System.Directory
-import System.Exit
 import System.Process
 import System.IO
 import System.Posix.IO (createPipe, fdToHandle)
@@ -58,7 +57,7 @@ findChildBinary = do
     do
       perms <- getPermissions path
       return $ readable perms
-    `catch` \e -> return False
+    `catch` \_ -> return False
 
 -- Create a new Child, starting the helper process.
 start :: IO (Either String Child)
@@ -126,7 +125,7 @@ run child entry = runErrorT (sendCommand >> awaitResponse) where
               checkResponse respMVar (ms-100)
 
 isDead :: Child -> IO Bool
-isDead child = catchJust ioErrors getExited (\e -> return True) where
+isDead child = catchJust ioErrors getExited (\_ -> return True) where
   getExited = do
     exit <- getProcessExitCode (childPHandle child)
     return $ isJust exit
