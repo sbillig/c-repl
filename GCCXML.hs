@@ -32,7 +32,7 @@ type XMLNode = Expat.Node String String
 -- @runGCCXML code@ runs a gccxml process on |code|, returning the XML output
 -- or an error string on error.
 runGCCXML :: String -> IO (Either String XML)
-runGCCXML code = run `catch` (\e -> do print e; undefined) where
+runGCCXML code = run `catch` (\e -> do print (e :: IOException); undefined) where
   run = do
     let cmd = "gccxml - -fxml=/dev/stdout"
     (inp,out,err,pid) <- runInteractiveCommand cmd
@@ -43,7 +43,7 @@ runGCCXML code = run `catch` (\e -> do print e; undefined) where
     exit <- BS.length output `seq` waitForProcess pid
     return $ case exit of
       ExitSuccess      -> return output
-      ExitFailure code -> throwError error
+      ExitFailure _code -> throwError error
 
 -- Symbol resolution: gccxml outputs a DAG as a flat list of nodes with ids
 -- and pointers to other nodes.  While parsing, we build a Map of symbol
@@ -75,7 +75,7 @@ showCType (Array t)       = showCType t ++ "[]"
 showCType (Const t)       = showCType t ++ " const"
 showCType (Enum t)        = t
 showCType (Fundamental t) = t
-showCType (CFunction t)   = "[function]"
+showCType (CFunction _t)   = "[function]"
 showCType (Pointer t)     = showCType t ++ "*"
 showCType (Struct t)      = t
 showCType (Typedef t)     = t
@@ -94,7 +94,7 @@ showSymbol (Type typ) = showCType typ
 -- or throw an error.
 resolve :: SymbolMap -> UnrSym -> Either String Symbol
 resolve map (UnrSym f) = f map >>= resolve map
-resolve map (ResSym s) = return s
+resolve _map (ResSym s) = return s
 
 -- Given a symbol map and an unresolved symbol, resolve it to a type or throw
 -- an error.
@@ -122,7 +122,7 @@ symbols code = runErrorT $ do
   parseSymbols xml = do
     tree <- case Expat.parseTree' Nothing xml of
               Left err -> throwError (show err)
-              Right (Expat.Element root attrs tree) -> return tree
+              Right (Expat.Element _root _attrs tree) -> return tree
     let nodes = mapMaybe parseNode tree
     let symbolmap = M.fromList nodes
     mapM (resolve symbolmap . snd) nodes
@@ -155,13 +155,13 @@ symbols code = runErrorT $ do
         ctype <- resolveType symbolmap unr
         return $ showCType ctype ++ " " ++ name
       return $ ResSym $ Function name args'
-  parseSymbol "Union" attrs kids = do
+  parseSymbol "Union" attrs _kids = do
     name <- msum [lookup "name" attrs, lookup "demangled" attrs, Just "anon"]
     return $ ResSym $ Type $ Union (prettify name)
-  parseSymbol "Struct" attrs kids = do
+  parseSymbol "Struct" attrs _kids = do
     name <- msum [lookup "name" attrs, lookup "demangled" attrs, Just "anon"]
     return $ ResSym $ Type $ Struct (prettify name)
-  parseSymbol "FunctionType" attrs kids = do
+  parseSymbol "FunctionType" _attrs _kids = do
     return $ ResSym $ Type $ CFunction []
   parseSymbol "Enumeration"     attrs _ = parseSymbolType0Arg attrs Enum
   parseSymbol "FundamentalType" attrs _ = parseSymbolType0Arg attrs Fundamental
